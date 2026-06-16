@@ -1,0 +1,44 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Raw data files (too large for version control)
+data/raw/
+data/warehouse/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+
+# Cache
+.cache/
+.pytest_cache/
+
+# DuckDB
+*.duckdb*
+
+# MarkDowns
+.md
