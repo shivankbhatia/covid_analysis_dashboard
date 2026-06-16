@@ -41,4 +41,9 @@ build/
 *.duckdb*
 
 # MarkDowns
-.md
+PHASE_1_COMPLETE.md
+PHASE_2_DATA_ACQUISITION.md
+PHASE_3_COMPLETE.md
+PHASE_3_ETL_PIPELINE.md
+
+*.md
