@@ -6,13 +6,33 @@ import polars as pl
 AGE_BINS = ['0-17', '18-29', '30-44', '45-59', '60-74', '75+']
 
 def standardise_age_group(series: pl.Series) -> pl.Series:
-    """Map varied age strings to standard DIM_AGE buckets."""
+    """Map varied age strings to standard DIM_AGE buckets.
+    
+    Handles actual CDC Case Surveillance age labels:
+      '0 - 9 Years', '10 - 19 Years', '20 - 29 Years', '30 - 39 Years',
+      '40 - 49 Years', '50 - 59 Years', '60 - 69 Years', '70 - 79 Years',
+      '80+ Years', 'NA', 'Unknown'
+    """
     mapping = {
+        # CDC Case Surveillance actual labels
+        '0 - 9 Years': '0-17',
+        '10 - 19 Years': '0-17',
+        '20 - 29 Years': '18-29',
+        '30 - 39 Years': '30-44',
+        '40 - 49 Years': '30-44',
+        '50 - 59 Years': '45-59',
+        '60 - 69 Years': '60-74',
+        '70 - 79 Years': '60-74',
+        '80+ Years': '75+',
+        # Legacy/alternate labels (from implementation plan)
         '0 - 17 years': '0-17',
         '18 to 29 years': '18-29',
-        '30 to 49 years': '30-44',   # CDC uses wider bucket; split not possible
+        '30 to 49 years': '30-44',
         '50 to 64 years': '45-59',
-        '65+ years': '60-74',        # Will be refined with NCHS data
+        '65+ years': '60-74',
+        # Handle NA/Unknown
+        'NA': 'Unknown',
+        'Missing': 'Unknown',
     }
     return series.replace(mapping).fill_null('Unknown')
 
