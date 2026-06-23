@@ -14,7 +14,7 @@ def standardise_age_group(series: pl.Series) -> pl.Series:
       '80+ Years', 'NA', 'Unknown'
     """
     mapping = {
-        # CDC Case Surveillance actual labels
+        # CDC Case Surveillance actual labels (old dataset: cdc_cases.csv)
         '0 - 9 Years': '0-17',
         '10 - 19 Years': '0-17',
         '20 - 29 Years': '18-29',
@@ -24,12 +24,14 @@ def standardise_age_group(series: pl.Series) -> pl.Series:
         '60 - 69 Years': '60-74',
         '70 - 79 Years': '60-74',
         '80+ Years': '75+',
-        # Legacy/alternate labels (from implementation plan)
+        # New CDC dataset labels (cdc_cases_new.csv) — wider buckets
         '0 - 17 years': '0-17',
-        '18 to 29 years': '18-29',
-        '30 to 49 years': '30-44',
+        '18 to 49 years': '30-44',   # Wide bucket: maps to middle range
         '50 to 64 years': '45-59',
         '65+ years': '60-74',
+        # Legacy/alternate labels (from implementation plan)
+        '18 to 29 years': '18-29',
+        '30 to 49 years': '30-44',
         # Handle NA/Unknown
         'NA': 'Unknown',
         'Missing': 'Unknown',

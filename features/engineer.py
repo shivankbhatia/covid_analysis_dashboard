@@ -66,6 +66,7 @@ def engineer_case_features(con, output_path):
         a.age_group,
         g.gender,
         r.race,
+        l.state_code,
         c.hosp_yn,
         c.icu_yn,
         c.death_yn,
@@ -99,6 +100,7 @@ def engineer_case_features(con, output_path):
     JOIN dim_age a ON c.age_id = a.age_id
     JOIN dim_gender g ON c.gender_id = g.gender_id
     JOIN dim_race r ON c.race_id = r.race_id
+    LEFT JOIN dim_location l ON c.location_id = l.location_id
     """
     
     features_df = con.execute(query).df()
@@ -234,30 +236,28 @@ def engineer_geographic_features(con, output_path):
     Compute geographic aggregates (state-level rates).
     Useful for choropleth maps and regional analysis.
     
-    Note: CDC case data does not include state-level data (privacy).
-    Geographic features use VAERS state data, HHS hospital data, and NCHS mortality data.
+    Now uses CDC case data directly (has res_state from cdc_cases_new.csv).
     """
     
     # ====================================================================
-    # COVID-19 case rates — aggregated from mortality data (has state)
-    # Since CDC cases don't have state, we derive geographic case info
-    # from mortality data as the best available proxy.
+    # COVID-19 case rates by state — from fact_covid_cases (now has state)
     # ====================================================================
     covid_query = """
     SELECT
         l.state_code,
         l.state_name,
-        SUM(COALESCE(m.covid_deaths, 0)) AS total_covid_deaths,
-        SUM(COALESCE(m.total_deaths, 0)) AS total_deaths,
-        ROUND(100.0 * SUM(COALESCE(m.covid_deaths, 0)) / 
-              NULLIF(SUM(COALESCE(m.total_deaths, 0)), 0), 2) AS covid_death_rate_pct,
-        COUNT(DISTINCT m.age_id) AS age_groups_reported,
-        COUNT(*) AS num_records
-    FROM fact_mortality m
-    JOIN dim_location l ON m.location_id = l.location_id
+        COUNT(*) AS total_cases,
+        SUM(COALESCE(c.hosp_yn, 0)) AS hospitalized_cases,
+        SUM(COALESCE(c.icu_yn, 0)) AS icu_cases,
+        SUM(COALESCE(c.death_yn, 0)) AS death_cases,
+        ROUND(100.0 * SUM(COALESCE(c.hosp_yn, 0)) / NULLIF(COUNT(*), 0), 2) AS hosp_rate_pct,
+        ROUND(100.0 * SUM(COALESCE(c.death_yn, 0)) / NULLIF(COUNT(*), 0), 2) AS death_rate_pct,
+        ROUND(100.0 * SUM(COALESCE(c.icu_yn, 0)) / NULLIF(COUNT(*), 0), 2) AS icu_rate_pct
+    FROM fact_covid_cases c
+    JOIN dim_location l ON c.location_id = l.location_id
     WHERE l.state_code IS NOT NULL
     GROUP BY 1, 2
-    ORDER BY total_covid_deaths DESC
+    ORDER BY total_cases DESC
     """
     
     covid_state_df = con.execute(covid_query).df()
@@ -267,11 +267,13 @@ def engineer_geographic_features(con, output_path):
     
     if len(covid_state_df) > 0:
         print(f"  [OK] COVID-19 geographic rates: {len(covid_state_df):,} states")
-        print(f"    - Total COVID deaths: {covid_state_df['total_covid_deaths'].sum():,}")
-        total_d = covid_state_df['total_deaths'].sum()
-        covid_d = covid_state_df['total_covid_deaths'].sum()
-        if total_d > 0:
-            print(f"    - Overall COVID death rate: {(covid_d / total_d * 100):.2f}%")
+        print(f"    - Total cases: {covid_state_df['total_cases'].sum():,}")
+        print(f"    - Total deaths: {covid_state_df['death_cases'].sum():,}")
+        total_c = covid_state_df['total_cases'].sum()
+        death_c = covid_state_df['death_cases'].sum()
+        if total_c > 0:
+            print(f"    - Overall death rate: {(death_c / total_c * 100):.2f}%")
+            print(f"    - Overall hosp rate: {(covid_state_df['hospitalized_cases'].sum() / total_c * 100):.2f}%")
     else:
         print("  [WARNING] No geographic COVID data found")
     print(f"    - Saved to: geo_covid_rates.parquet")

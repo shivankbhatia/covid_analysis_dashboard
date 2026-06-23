@@ -8,6 +8,7 @@ __pycache__/
 
 # Raw data files (too large for version control)
 data/raw/
+data/processed/
 data/warehouse/
 
 # Jupyter Notebook

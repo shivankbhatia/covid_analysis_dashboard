@@ -165,7 +165,8 @@ def load_facts(con, script_dir):
     processed_path = os.path.join(base_path, 'data', 'processed')
     
     # ========================================================================
-    # fact_covid_cases — with proper age, gender, race dimension mapping
+    # fact_covid_cases — with proper age, gender, race, location mapping
+    # Now includes res_state from cdc_cases_new.csv
     # ========================================================================
     cdc_path = os.path.join(processed_path, 'cdc_cases.parquet').replace('\\', '/')
     result = con.execute(f"""
@@ -173,17 +174,18 @@ def load_facts(con, script_dir):
     """).fetchone()
     cdc_count = result[0]
     
-    # Note: CDC Public Use data does not include state, so location_id defaults to NULL
     # Age mapping: parquet age_group already standardised by ETL (0-17, 18-29, etc.)
+    # Location mapping: res_state (2-letter code) -> dim_location.location_id
     con.execute(f"""
         INSERT INTO fact_covid_cases
         SELECT
             row_number() OVER () as case_id,
             CASE 
-                WHEN case_month IS NOT NULL THEN CAST(case_month || '/01' AS DATE)
+                WHEN case_month IS NOT NULL THEN CAST(case_month || '-01' AS DATE)
                 ELSE NULL
             END as case_month,
-            NULL as location_id,
+            -- Map res_state to dim_location
+            dl.location_id as location_id,
             -- Map age_group text to dim_age.age_id
             CASE age_group
                 WHEN '0-17'    THEN 1
@@ -196,15 +198,15 @@ def load_facts(con, script_dir):
             END as age_id,
             -- Map sex to dim_gender.gender_id
             CASE 
-                WHEN sex = 'Male' THEN 1 
-                WHEN sex = 'Female' THEN 2 
+                WHEN cdc.sex = 'Male' THEN 1 
+                WHEN cdc.sex = 'Female' THEN 2 
                 ELSE 3 
             END as gender_id,
             -- Map race_ethnicity_combined to dim_race.race_id
             CASE
                 WHEN race_ethnicity_combined LIKE '%White%' THEN 1
                 WHEN race_ethnicity_combined LIKE '%Black%' THEN 2
-                WHEN race_ethnicity_combined LIKE '%Hispanic%' THEN 3
+                WHEN race_ethnicity_combined LIKE 'Hispanic%' THEN 3
                 WHEN race_ethnicity_combined LIKE '%Asian%' THEN 4
                 WHEN race_ethnicity_combined LIKE '%Indian%' OR race_ethnicity_combined LIKE '%Alaska%' THEN 5
                 WHEN race_ethnicity_combined LIKE '%Hawaiian%' OR race_ethnicity_combined LIKE '%Pacific%' THEN 6
@@ -214,11 +216,11 @@ def load_facts(con, script_dir):
             hosp_yn,
             icu_yn,
             death_yn,
-            0 as underlying_yn
-        FROM read_parquet('{cdc_path}')
-        LIMIT 10000
+            COALESCE(underlying_conditions_yn, 0) as underlying_yn
+        FROM read_parquet('{cdc_path}') cdc
+        LEFT JOIN dim_location dl ON UPPER(TRIM(cdc.res_state)) = dl.state_code
     """)
-    print(f"  [OK] fact_covid_cases loaded (sample: 10,000 rows, total available: {cdc_count:,})")
+    print(f"  [OK] fact_covid_cases loaded ({cdc_count:,} rows)")
     
     # ========================================================================
     # fact_vaccine_events — with age bucketing, state mapping, vaccine mapping
@@ -282,11 +284,10 @@ def load_facts(con, script_dir):
         INNER JOIN tmp_vaers_vax tv ON d.VAERS_ID = tv.VAERS_ID
         LEFT JOIN dim_location dl ON UPPER(d.STATE) = dl.state_code
         INNER JOIN dim_vaccine dv ON tv.manufacturer = dv.manufacturer
-        LIMIT 10000
     """)
     
     con.execute("DROP TABLE IF EXISTS tmp_vaers_vax")
-    print(f"  [OK] fact_vaccine_events loaded (sample: 10,000 rows, total available: {vaers_count:,})")
+    print(f"  [OK] fact_vaccine_events loaded ({vaers_count:,} rows)")
     
     # ========================================================================
     # fact_vaccine_symptoms
@@ -304,9 +305,8 @@ def load_facts(con, script_dir):
         FROM read_parquet('{vaers_sym_path}') v
         JOIN dim_symptom ds ON v.symptom = ds.symptom
         WHERE v.symptom IS NOT NULL
-        LIMIT 100000
     """)
-    print(f"  [OK] fact_vaccine_symptoms loaded (sample: 100,000 rows, total available: {symp_count:,})")
+    print(f"  [OK] fact_vaccine_symptoms loaded ({symp_count:,} rows)")
     
     # ========================================================================
     # fact_hospital_capacity
@@ -456,7 +456,7 @@ def validate_warehouse(con):
     """).fetchall()
     print("    Top 5 states in mortality:", [(row[0], row[1]) for row in r])
     
-    print("\n  STATUS: Warehouse loaded with proper dimension mapping (fact tables use samples)")
+    print("\n  STATUS: Warehouse loaded with proper dimension mapping (full dataset)")
 
 if __name__ == '__main__':
     create_warehouse()
